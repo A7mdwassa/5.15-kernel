@@ -72,11 +72,13 @@ jobs:
           )
           make "${BUILD_OPTIONS[@]}" gki_defconfig
           make "${BUILD_OPTIONS[@]}" Image || exit 1
+          cp out/arch/arm64/boot/Image ./
+          cp out/arch/arm64/boot/Image ../
           
       - name: Upload Kernel Image
         uses: actions/upload-artifact@v4
         with:
           name: kernel-Image
-          path: out/arch/arm64/boot/Image
+          path: Image
           if-no-files-found: error
           retention-days: 7
