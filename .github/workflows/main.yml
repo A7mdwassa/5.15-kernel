@@ -39,7 +39,7 @@ jobs:
           cd android_kernel_5.15_nothing_mt6886
           wget https://gist.githubusercontent.com/SaeedNassar/444fef4f0f51bba91fbaf5ef7c62f883/raw/73b7202773eaeecbd49f62937cd7bd5fe9c83696/sukisu_defconfig -O arch/arm64/configs/sukisu_defconfig
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
-          git clone gitlab.com/simonpunk/susfs4ksu --depth 1 -b gki-android13-5.15 && cd susfs4ksu/kernel_patches && cp 50_add_susfs_in_gki-android13-5.15.patch ../../ && cp fs/* ../../fs/ && cp include/linux/* ../../include/linux && cd ../../
+          git clone https://gitlab.com/simonpunk/susfs4ksu --depth 1 -b gki-android13-5.15 && cd susfs4ksu/kernel_patches && cp 50_add_susfs_in_gki-android13-5.15.patch ../../ && cp fs/* ../../fs/ && cp include/linux/* ../../include/linux && cd ../../
           patch -p1 < 50_add_susfs_in_gki-android13-5.15.patch
           # Export toolchain paths
           export PATH="${HOME}/toolchains/neutron-clang/bin:${PATH}"
