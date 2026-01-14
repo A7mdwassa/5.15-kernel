@@ -1,0 +1,86 @@
+name: GKI Kernel Build
+
+permissions:
+  contents: write # Allow writing to repository contents (for pushing tags)
+  actions: write # Allows triggering actions
+
+on:
+  workflow_dispatch: # This allows this workflow to be called from another workflow
+jobs:
+  build-kernel-kernelsu-susfs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 8192
+          temp-reserve-mb: 2048
+          swap-size-mb: 8192
+          remove-dotnet: "true"
+          remove-android: "true"
+          remove-haskell: "true"
+          remove-codeql: "true"
+      - name: Download & Install PKGs
+        run: |
+          sudo apt update && sudo apt install -y git device-tree-compiler lz4 xz-utils zlib1g-dev openjdk-17-jdk gcc g++ python3 python-is-python3 p7zip-full android-sdk-libsparse-utils erofs-utils \
+            default-jdk git gnupg flex bison gperf build-essential zip curl libc6-dev libncurses-dev libx11-dev libreadline-dev libgl1 libgl1-mesa-dev \
+            python3 make sudo gcc g++ bc grep tofrodos python3-markdown libxml2-utils xsltproc zlib1g-dev python-is-python3 libc6-dev libtinfo6 \
+            make repo cpio kmod openssl libelf-dev pahole libssl-dev libarchive-tools zstd rsync --fix-missing && wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb && sudo dpkg -i libtinfo5_6.3-2ubuntu0.1_amd64.deb
+      - name: Download Clang
+        run: |
+          export KERNEL_ROOT="$(pwd)"
+          mkdir -p "${HOME}/toolchains/neutron-clang" && cd "${HOME}/toolchains/neutron-clang"
+          curl -LO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman" && chmod +x antman
+          bash antman -S && bash antman --patch=glibc
+          cd "${KERNEL_ROOT}"
+      - name: Download Kernel
+        run: |
+          git clone https://github.com/NothingOSS/android_kernel_5.15_nothing_mt6886 --depth 1 -b mt6886/Pacman/16b
+          cd android_kernel_5.15_nothing_mt6886
+          wget https://gist.githubusercontent.com/SaeedNassar/444fef4f0f51bba91fbaf5ef7c62f883/raw/73b7202773eaeecbd49f62937cd7bd5fe9c83696/sukisu_defconfig -O arch/arm64/configs/sukisu_defconfig
+      - name: Add SukiSU and SUSFS
+        run: |
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
+          git clone gitlab.com/simonpunk/susfs4ksu --depth 1 -b gki-android13-5.15 && cd susfs4ksu/kernel_patches && cp 50_add_susfs_in_gki-android13-5.15.patch ../../ && cp fs/* ../../fs/ && cp include/linux/* ../../include/linux && cd ../../
+          patch -p1 < 50_add_susfs_in_gki-android13-5.15.patch
+      - name: Build Kernel
+        run: |
+          # Export toolchain paths
+          export PATH="${HOME}/toolchains/neutron-clang/bin:${PATH}"
+          export NEUTRON_PATH="${HOME}/toolchains/neutron-clang/bin"
+          export LD_LIBRARY_PATH="${HOME}/toolchains/neutron-clang/lib:${LD_LIBRARY_PATH}"
+          
+          # Set cross-compile environment variables
+          export BUILD_CC="${HOME}/toolchains/neutron-clang/bin/clang"
+          
+          # Build options for the kernel
+          export BUILD_OPTIONS=(
+              -C "${KERNEL_ROOT}"
+              O="${KERNEL_ROOT}/out"
+              -j"$(nproc)"
+              ARCH=arm64
+              CC="${BUILD_CC}"
+              CROSS_COMPILE=aarch64-linux-gnu-
+              CLANG_TRIPLE=aarch64-linux-gnu-
+              LLVM=1
+              LLVM_IAS=1
+              AR="${NEUTRON_PATH}/llvm-ar"
+              NM="${NEUTRON_PATH}/llvm-nm"
+              LD="${NEUTRON_PATH}/ld.lld"
+              STRIP="${NEUTRON_PATH}/llvm-strip"
+              OBJCOPY="${NEUTRON_PATH}/llvm-objcopy"
+              OBJDUMP="${NEUTRON_PATH}/llvm-objdump"
+              READELF="${NEUTRON_PATH}/llvm-readelf"
+              HOSTCC="${NEUTRON_PATH}/clang"
+              HOSTCXX="${NEUTRON_PATH}/clang++"
+          )
+          make "${BUILD_OPTIONS[@]}" gki_defconfig
+          make "${BUILD_OPTIONS[@]}" Image || exit 1
+          
+      - name: Upload Kernel Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-Image
+          path: out/arch/arm64/boot/Image
+          if-no-files-found: error
+          retention-days: 7
